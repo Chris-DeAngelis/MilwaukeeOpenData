@@ -1,0 +1,183 @@
+---
+title: "Milwaukee Crime"
+author: "Chris DeAngelis, CFA"
+date: "July 23, 2019"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+<style type="text/css">
+
+h1.title {
+  font-size: 38px;
+  color: Black;
+  text-align: center;
+}
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Black;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: Black;
+  text-align: center;
+}
+</style>
+
+### Objective
+  
+
+First, I setup packages to run my analysis.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse) # Tidying, manipulating, and charting data
+library(lemon) # Added features to ggplot2
+library(RColorBrewer) # Adding more color features to ggplot2
+library(flextable) # Rich formatting for tables
+library(scales) # Formatting numbers
+library(leaflet) # Drawing maps
+library(rgdal)
+library(sp) # Converting coordinates from UTM format to 
+
+# Defining a standard theme across all charts
+chart_theme <-   theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "gray", size = 9),
+    panel.background = element_blank()
+)
+
+# COOL: https://towardsdatascience.com/the-data-driven-guide-to-crime-in-milwaukee-b6a373f898e9
+```
+
+### Sourcing data
+
+Exploring Milwaukee's crime data on data.milwaukee.gov (https://data.milwaukee.gov/dataset/wibr).
+```{r source, echo = FALSE}
+raw_data <- read_csv("https://data.milwaukee.gov/dataset/e5feaad3-ee73-418c-b65d-ef810c199390/resource/87843297-a6fa-46d4-ba5d-cb342fb2d3bb/download/wibr.csv")
+
+data <- raw_data %>%
+          select(2:6,9,11:length(raw_data))
+```
+
+### Crime by Type
+
+Milwaukee's crime seems to have fallen consistently since 2005. This seems to be a broader trend across all crime types. 
+```{r crime_type_setup}
+# Identify instances of each crime type by year
+crimes_count <- data %>%
+                select(2, 11:length(data)) %>%
+                #filter(ReportedYear == "2019") %>%
+                group_by(ReportedYear) %>%
+                summarize(Arson = sum(Arson), AssaultOffense = sum(AssaultOffense), Burglary = sum(Burglary), CriminalDamage = sum(CriminalDamage), Homicide = sum(Homicide), LockedVehicle = sum(LockedVehicle), Robbery = sum(Robbery), SexOffense = sum(SexOffense), Theft = sum(Theft), VehicleTheft = sum(VehicleTheft)) %>%
+                gather(Crimes, Count, -ReportedYear)
+
+# Defining chart colors
+purples_colors <- brewer.pal(9, "Purples") 
+purples_colors <- colorRampPalette(purples_colors)(length(unique(crimes_count$Crimes)))
+
+# Look at overall trend in crime
+ggplot(crimes_count, aes(x = ReportedYear, y = Count/1000, fill = Crimes)) +
+  geom_bar(position = 'stack', show.legend = TRUE, stat = 'identity') +
+  scale_fill_manual(values = purples_colors) +
+  labs(title = "Milwaukee Crime Trending Downward", x = "", y = "Instances (000's)", subtitle = "Chris DeAngelis, CFA") +
+  chart_theme
+
+# Look at crime by type over year
+ggplot(crimes_count, aes(x = ReportedYear, y = Count/1000)) +
+  geom_bar(stat = 'identity', fill = purples_colors[length(purples_colors)]) +
+  facet_rep_wrap(Crimes ~ ., scales = "fixed", repeat.tick.labels = TRUE) +
+  labs(title = "Milwaukee Crime by Type Over Time", x = "", y = "Instances (000's)", subtitle = "Chris DeAngelis, CFA") +
+  chart_theme
+```
+
+### 2018 Crime
+
+Assault & Offense still stands out as a 1/3 of all reported crime in Milwaukee.
+```{r crime_2018}
+# Look at total crime in 2018
+current_crime <- data %>%
+                  filter(ReportedYear == 2018) %>%
+                  select(-c("ReportedDateTime", "ReportedYear", "POLICE", "WARD"))
+                  
+# Calculate Crimes by Zip Code
+crime_by_zip <- current_crime %>%
+                  select(-c(1,2, 5,6)) %>%
+                  group_by(ZIP) %>%
+                  summarize(Arson = sum(Arson), AssaultOffense = sum(AssaultOffense), Burglary = sum(Burglary), CriminalDamage = sum(CriminalDamage), Homicide = sum(Homicide), LockedVehicle = sum(LockedVehicle), Robbery = sum(Robbery), SexOffense = sum(SexOffense), Theft = sum(Theft), VehicleTheft = sum(VehicleTheft)) %>%
+                  gather(crimes, count, -ZIP) %>%
+                  mutate(percent = count / sum(count) * 100) %>%
+                  arrange(desc(percent))
+
+#test <- test[!is.na(test$V1) || is.na(test$v2),]
+#test <- test[!is.na(test$V2),]
+
+# CONVERSION NOT WORKING YET
+points <- SpatialPoints(test, proj4string=CRS("+proj=longlat"))
+hmm <- spTransform(points, CRS("+proj=longlat +datum=WGS84"))
+
+#https://rpubs.com/walkerke/rstudio_gis
+
+
+# current_crime[!is.na(current_crime$RoughX) || !is.na(current_crime$RoughY),] %>%
+#   leaflet() %>%
+#   addTiles() %>%
+#   addMarkers(~as.numeric('RoughY'), ~as.numeric('RoughX'))
+#   addCircles(color = 'red')
+  
+ # fitBounds() fits the view into the rectangle [lng1, lat1] – [lng2, lat2]
+
+
+```
+
+### Crime by Location
+```{r location}
+
+
+```
+
+### Weapon of Choice
+
+Looks at the top 10 most frequent and least frequent weapons used between 2005 and 2019. I don't know why but I expected nunchucks. I did not expect purses.
+```{r weapons}
+# Build
+weapons <- unlist(strsplit(data$WeaponUsed, "/|\\,"))
+weapons_df <- as.data.frame(table(weapons))
+#weapons <- unlist(strsplit(data$WeaponUsed, "/"))
+#weapons <- append(weapons,unlist(strsplit(data$WeaponUsed, ",")))
+weapons_tidy <- weapons_df %>%
+                  filter(!weapons %in% c("UNKNOWN", "UNKNO", "NA", "OTHER", "NONE", "11", "12", "14", "16", "20")) %>%
+                  group_by(weapons) %>%
+                  summarise(instances = sum(Freq)) %>%
+                  mutate(percent = instances / sum(instances) * 100) %>%
+                  arrange(desc(instances)) %>%
+                  mutate_at(vars(instances), comma, accuracy = 1) %>%
+                  mutate_at(vars(percent), comma, accuracy = 1, suffix = "%")
+
+# Top 10 weapons used between 2005 and 2019
+colnames(weapons_tidy) <- c("Top 10 Weapons", "Instances", "% of Total")
+flextable(head(weapons_tidy, 10)) %>%
+  bg(part = "header", bg = "black") %>%
+  color(part = "header", color = "white") %>%
+  align(part = "all", align = "center") %>%
+  align(j = 1, align = "left") %>%
+  autofit()
+
+# Bottom 10 weapons used between 2005 and 2019
+colnames(weapons_tidy) <- c("Bottom 10 Weapons", "Instances", "% of Total")
+flextable(tail(weapons_tidy, 10)) %>%
+  bg(part = "header", bg = "black") %>%
+  color(part = "header", color = "white") %>%
+  align(part = "all", align = "center") %>%
+  align(j = 1, align = "left") %>%
+  autofit()
+
+```
+
